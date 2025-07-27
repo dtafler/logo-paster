@@ -1,0 +1,47 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ main, master ]  # Triggers on every push to main/master
+  workflow_dispatch:  # Allows manual triggering
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+        
+    - name: Install dependencies
+      run: |
+        uv sync
+        uv add pyinstaller
+        
+    - name: Build executable with PyInstaller
+      run: |
+        uv run pyinstaller LogoStamper.spec
+        
+    - name: Create release package
+      run: |
+        mkdir release
+        copy dist\LogoStamper.exe release\
+        echo "Logo Stamper - Windows Executable" > release\README.txt
+        echo "Double-click LogoStamper.exe to run the application." >> release\README.txt
+        echo "" >> release\README.txt
+        echo "This application allows you to add logo watermarks to your images." >> release\README.txt
+        
+    - name: Upload executable as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: LogoStamper-Windows
+        path: release/
+        retention-days: 30
