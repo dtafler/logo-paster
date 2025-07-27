@@ -2,7 +2,8 @@ import argparse
 from pathlib import Path
 from PIL import Image
 from enum import Enum
-from typing import Tuple
+from typing import Tuple, Optional
+from image_analyzer import ImageAnalyzer
 
 class VerticalPosition(Enum):
     TOP = "top"
@@ -23,8 +24,16 @@ def stamp_folder(
     logo_scale: float = 0.2,
     opacity: float = 1.0, 
     recursive: bool = True,
-    suffix: str = ""
+    suffix: str = "",
+    use_ai_naming: bool = False,
+    openai_api_key: Optional[str] = None,
+    ai_model: str = "gpt-4o-mini",
+    max_filename_length: int = 50
 ) -> None:
+    
+    # Convert to Path objects
+    im_dir = Path(im_dir)
+    logo_path = Path(logo_path)
     
     image_extensions = ('.jpg', '.jpeg', '.png')
     
@@ -40,6 +49,18 @@ def stamp_folder(
             raise ValueError(f"Duplicate filename detected: {path.name}\n  - {filename_dict[path.name]}\n  - {path}\nAn output directory from a previous run could be the cause. Either delete it or disable recursive image search.")
         else:
             filename_dict[path.name] = path
+    
+    # Initialize AI analyzer if needed
+    analyzer = None
+    if use_ai_naming:
+        if not openai_api_key:
+            raise ValueError("OpenAI API key is required when use_ai_naming is True")
+        try:
+            analyzer = ImageAnalyzer(openai_api_key, ai_model)
+            print(f"[INFO] AI naming enabled using model: {ai_model}")
+        except Exception as e:
+            print(f"[ERROR] Failed to initialize AI analyzer: {e}")
+            return
     
     if save_dir is None:
         save_dir = Path(im_dir) / "output"
@@ -63,7 +84,9 @@ def stamp_folder(
                 padding, 
                 logo_scale, 
                 opacity,
-                suffix
+                suffix,
+                analyzer,
+                max_filename_length
             )
         except ValueError as e:
             print(e)
@@ -78,7 +101,9 @@ def _add_logo_single(
     padding: int = 10,
     logo_scale: float = 0.2,
     opacity: float = 1.0,
-    suffix: str = ""
+    suffix: str = "",
+    analyzer: Optional[ImageAnalyzer] = None,
+    max_filename_length: int = 50
 ) -> None:
     
     try:
@@ -101,11 +126,31 @@ def _add_logo_single(
 
     # Save the resulting image
     im_path = Path(im_path)
-    if suffix:
-        # Add suffix before file extension
-        save_path = Path(save_dir) / f"{im_path.stem}{suffix}{im_path.suffix}"
+    
+    # Determine the filename
+    if analyzer:
+        print(f"[INFO] Analyzing image content for {im_path.name}...")
+        ai_filename = analyzer.analyze_image(im_path, max_filename_length)
+        if ai_filename:
+            # Use AI-generated filename
+            if suffix:
+                save_path = Path(save_dir) / f"{ai_filename}{suffix}{im_path.suffix}"
+            else:
+                save_path = Path(save_dir) / f"{ai_filename}{im_path.suffix}"
+            print(f"[INFO] AI generated filename: {ai_filename}")
+        else:
+            # Fallback to original filename if AI analysis fails
+            print(f"[WARNING] AI analysis failed, using original filename")
+            if suffix:
+                save_path = Path(save_dir) / f"{im_path.stem}{suffix}{im_path.suffix}"
+            else:
+                save_path = Path(save_dir) / im_path.name
     else:
-        save_path = Path(save_dir) / im_path.name
+        # Use original filename with optional suffix
+        if suffix:
+            save_path = Path(save_dir) / f"{im_path.stem}{suffix}{im_path.suffix}"
+        else:
+            save_path = Path(save_dir) / im_path.name
 
     # no alpha channel for jpeg!
     file_extension = save_path.suffix.lower()
@@ -206,6 +251,12 @@ if __name__ == "__main__":
     parser.add_argument("--suffix", help="suffix to add to output filenames (before extension)", type=str, default="")
     parser.add_argument("--no-rec", help="turn off recursive image search", action="store_true")
     
+    # AI naming options
+    parser.add_argument("--use-ai-naming", help="use AI to generate descriptive filenames", action="store_true")
+    parser.add_argument("--openai-api-key", help="OpenAI API key (or set OPENAI_API_KEY env var)", type=str)
+    parser.add_argument("--ai-model", help="OpenAI model to use for image analysis", type=str, default="gpt-4o-mini")
+    parser.add_argument("--max-filename-length", help="maximum length for AI-generated filenames", type=int, default=50)
+    
     args = parser.parse_args()
     
     # Validate opacity
@@ -215,6 +266,19 @@ if __name__ == "__main__":
     # Validate logo scale
     if not 0.01 <= args.logo_scale <= 1.0:
         parser.error("Logo scale must be between 0.01 and 1.0")
+    
+    # Handle AI naming options
+    openai_api_key = args.openai_api_key
+    if args.use_ai_naming and not openai_api_key:
+        # Try to get from environment variable
+        import os
+        openai_api_key = os.getenv('OPENAI_API_KEY')
+        if not openai_api_key:
+            parser.error("OpenAI API key is required when using --use-ai-naming. Provide via --openai-api-key or set OPENAI_API_KEY environment variable.")
+    
+    # Validate filename length
+    if args.max_filename_length < 10 or args.max_filename_length > 100:
+        parser.error("max-filename-length must be between 10 and 100 characters")
     
     # Convert string arguments to enums
     vertical_pos = VerticalPosition(args.vertical_pos)
@@ -230,6 +294,10 @@ if __name__ == "__main__":
         args.logo_scale,
         args.opacity, 
         not(args.no_rec),
-        args.suffix
+        args.suffix,
+        args.use_ai_naming,
+        openai_api_key,
+        args.ai_model,
+        args.max_filename_length
     )
     

@@ -30,6 +30,12 @@ class LogoStamperGUI:
         self.recursive = tk.BooleanVar(value=True)
         self.suffix = tk.StringVar(value="")
         
+        # AI naming variables
+        self.use_ai_naming = tk.BooleanVar(value=False)
+        self.openai_api_key = tk.StringVar()
+        self.ai_model = tk.StringVar(value="gpt-4o-mini")
+        self.max_filename_length = tk.IntVar(value=50)
+        
         # Preview variables
         self.preview_image = None
         self.preview_photo = None
@@ -192,16 +198,47 @@ class LogoStamperGUI:
                                font=('Arial', 8), foreground='gray')
         suffix_info.grid(row=3, column=2, sticky=tk.W, pady=(10, 0), padx=(0, 10))
         
+        # AI naming section
+        ai_naming_check = ttk.Checkbutton(options_frame, text="Use AI to generate descriptive filenames", 
+                                         variable=self.use_ai_naming,
+                                         command=self.toggle_ai_naming)
+        ai_naming_check.grid(row=4, column=0, columnspan=2, sticky=tk.W, pady=(15, 5))
+        
+        # OpenAI API Key
+        self.api_key_label = ttk.Label(options_frame, text="OpenAI API Key:", state='disabled')
+        self.api_key_label.grid(row=5, column=0, sticky=tk.W, padx=(20, 10), pady=(5, 0))
+        
+        self.api_key_entry = ttk.Entry(options_frame, textvariable=self.openai_api_key, 
+                                      width=30, show="*", state='disabled')
+        self.api_key_entry.grid(row=5, column=1, columnspan=2, sticky=tk.W, pady=(5, 0), padx=(0, 20))
+        
+        # AI Model selection
+        self.model_label = ttk.Label(options_frame, text="AI Model:", state='disabled')
+        self.model_label.grid(row=6, column=0, sticky=tk.W, padx=(20, 10), pady=(5, 0))
+        
+        self.model_combo = ttk.Combobox(options_frame, textvariable=self.ai_model,
+                                       values=["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"], 
+                                       state="disabled", width=15)
+        self.model_combo.grid(row=6, column=1, sticky=tk.W, pady=(5, 0), padx=(0, 20))
+        
+        # Max filename length
+        self.filename_length_label = ttk.Label(options_frame, text="Max filename length:", state='disabled')
+        self.filename_length_label.grid(row=6, column=2, sticky=tk.W, padx=(0, 10), pady=(5, 0))
+        
+        self.filename_length_entry = ttk.Entry(options_frame, textvariable=self.max_filename_length, 
+                                              width=5, state='disabled')
+        self.filename_length_entry.grid(row=6, column=3, sticky=tk.W, pady=(5, 0))
+        
         # Preview button and show preview checkbox on same row
         preview_button = ttk.Button(options_frame, text="Update Preview", 
                                    command=self.update_preview)
-        preview_button.grid(row=4, column=2, pady=(10, 0), padx=(0, 10))
+        preview_button.grid(row=7, column=2, pady=(15, 0), padx=(0, 10))
         
         # Show preview option (in controls frame so it's always visible)
         show_preview_check = ttk.Checkbutton(options_frame, text="Show preview", 
                                            variable=self.show_preview,
                                            command=self.toggle_preview)
-        show_preview_check.grid(row=4, column=3, sticky=tk.W, pady=(10, 0))
+        show_preview_check.grid(row=7, column=3, sticky=tk.W, pady=(15, 0))
         
         # Process button
         self.process_button = ttk.Button(controls_frame, text="Add Logo to Images", 
@@ -428,6 +465,31 @@ class LogoStamperGUI:
             self.main_frame.columnconfigure(0, weight=1)  # Controls frame - can expand
             self.main_frame.columnconfigure(1, weight=0)  # Preview frame - no space
     
+    def toggle_ai_naming(self):
+        """Toggle AI naming controls"""
+        if self.use_ai_naming.get():
+            # Enable AI naming controls
+            self.api_key_label.configure(state='normal')
+            self.api_key_entry.configure(state='normal')
+            self.model_label.configure(state='normal')
+            self.model_combo.configure(state='readonly')
+            self.filename_length_label.configure(state='normal')
+            self.filename_length_entry.configure(state='normal')
+            
+            # Load API key from environment if available
+            import os
+            env_key = os.getenv('OPENAI_API_KEY')
+            if env_key and not self.openai_api_key.get():
+                self.openai_api_key.set(env_key)
+        else:
+            # Disable AI naming controls
+            self.api_key_label.configure(state='disabled')
+            self.api_key_entry.configure(state='disabled')
+            self.model_label.configure(state='disabled')
+            self.model_combo.configure(state='disabled')
+            self.filename_length_label.configure(state='disabled')
+            self.filename_length_entry.configure(state='disabled')
+    
     def reset_zoom(self):
         """Reset zoom to 100%"""
         self.zoom_factor = 1.0
@@ -619,6 +681,22 @@ class LogoStamperGUI:
             messagebox.showerror("Error", "Please select a save directory.")
             return False
             
+        # Validate AI naming options
+        if self.use_ai_naming.get():
+            if not self.openai_api_key.get():
+                messagebox.showerror("Error", "OpenAI API key is required when using AI naming.\nYou can set the OPENAI_API_KEY environment variable or enter it manually.")
+                return False
+            
+            # Validate filename length
+            try:
+                max_length = self.max_filename_length.get()
+                if max_length < 10 or max_length > 100:
+                    messagebox.showerror("Error", "Maximum filename length must be between 10 and 100 characters.")
+                    return False
+            except tk.TclError:
+                messagebox.showerror("Error", "Maximum filename length must be a valid number.")
+                return False
+            
         return True
         
     def process_images(self):
@@ -656,6 +734,12 @@ class LogoStamperGUI:
             opacity = self.opacity.get()
             recursive = self.recursive.get()
             suffix = self.suffix.get()
+            
+            # Get AI naming options
+            use_ai_naming = self.use_ai_naming.get()
+            openai_api_key = self.openai_api_key.get() if use_ai_naming else None
+            ai_model = self.ai_model.get()
+            max_filename_length = self.max_filename_length.get()
                 
             # Process the images
             stamp_folder(
@@ -668,7 +752,11 @@ class LogoStamperGUI:
                 logo_scale=logo_scale,
                 opacity=opacity,
                 recursive=recursive,
-                suffix=suffix
+                suffix=suffix,
+                use_ai_naming=use_ai_naming,
+                openai_api_key=openai_api_key,
+                ai_model=ai_model,
+                max_filename_length=max_filename_length
             )
             
             # Get the captured output
