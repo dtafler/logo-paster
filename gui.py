@@ -28,6 +28,7 @@ class LogoStamperGUI:
         self.logo_scale = tk.DoubleVar(value=0.2)
         self.opacity = tk.DoubleVar(value=1.0)
         self.recursive = tk.BooleanVar(value=True)
+        self.suffix = tk.StringVar(value="")
         
         # Preview variables
         self.preview_image = None
@@ -180,16 +181,27 @@ class LogoStamperGUI:
         self.opacity_label.grid(row=0, column=1, padx=(10, 0))
         opacity_scale.configure(command=self.update_opacity_label)
         
+        # Filename suffix
+        ttk.Label(options_frame, text="Filename Suffix:").grid(row=3, column=0, sticky=tk.W, padx=(0, 10), pady=(10, 0))
+        suffix_entry = ttk.Entry(options_frame, textvariable=self.suffix, width=20)
+        suffix_entry.grid(row=3, column=1, sticky=tk.W, pady=(10, 0), padx=(0, 20))
+        suffix_entry.bind('<KeyRelease>', lambda e: self.update_preview())
+        
+        # Info label for suffix
+        suffix_info = ttk.Label(options_frame, text="(e.g., '_watermarked')", 
+                               font=('Arial', 8), foreground='gray')
+        suffix_info.grid(row=3, column=2, sticky=tk.W, pady=(10, 0), padx=(0, 10))
+        
         # Preview button and show preview checkbox on same row
         preview_button = ttk.Button(options_frame, text="Update Preview", 
                                    command=self.update_preview)
-        preview_button.grid(row=2, column=2, pady=(10, 0), padx=(0, 10))
+        preview_button.grid(row=4, column=2, pady=(10, 0), padx=(0, 10))
         
         # Show preview option (in controls frame so it's always visible)
         show_preview_check = ttk.Checkbutton(options_frame, text="Show preview", 
                                            variable=self.show_preview,
                                            command=self.toggle_preview)
-        show_preview_check.grid(row=2, column=3, sticky=tk.W, pady=(10, 0))
+        show_preview_check.grid(row=4, column=3, sticky=tk.W, pady=(10, 0))
         
         # Process button
         self.process_button = ttk.Button(controls_frame, text="Add Logo to Images", 
@@ -643,6 +655,7 @@ class LogoStamperGUI:
             logo_scale = self.logo_scale.get()
             opacity = self.opacity.get()
             recursive = self.recursive.get()
+            suffix = self.suffix.get()
                 
             # Process the images
             stamp_folder(
@@ -654,7 +667,8 @@ class LogoStamperGUI:
                 padding=padding,
                 logo_scale=logo_scale,
                 opacity=opacity,
-                recursive=recursive
+                recursive=recursive,
+                suffix=suffix
             )
             
             # Get the captured output

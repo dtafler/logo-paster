@@ -22,7 +22,8 @@ def stamp_folder(
     padding: int = 10,
     logo_scale: float = 0.2,
     opacity: float = 1.0, 
-    recursive: bool = True
+    recursive: bool = True,
+    suffix: str = ""
 ) -> None:
     
     image_extensions = ('.jpg', '.jpeg', '.png')
@@ -61,7 +62,8 @@ def stamp_folder(
                 horizontal_pos, 
                 padding, 
                 logo_scale, 
-                opacity
+                opacity,
+                suffix
             )
         except ValueError as e:
             print(e)
@@ -75,7 +77,8 @@ def _add_logo_single(
     horizontal_pos: HorizontalPosition = HorizontalPosition.CENTER,
     padding: int = 10,
     logo_scale: float = 0.2,
-    opacity: float = 1.0
+    opacity: float = 1.0,
+    suffix: str = ""
 ) -> None:
     
     try:
@@ -97,7 +100,12 @@ def _add_logo_single(
     )
 
     # Save the resulting image
-    save_path = Path(save_dir) / im_path.name
+    im_path = Path(im_path)
+    if suffix:
+        # Add suffix before file extension
+        save_path = Path(save_dir) / f"{im_path.stem}{suffix}{im_path.suffix}"
+    else:
+        save_path = Path(save_dir) / im_path.name
 
     # no alpha channel for jpeg!
     file_extension = save_path.suffix.lower()
@@ -195,6 +203,7 @@ if __name__ == "__main__":
     parser.add_argument("--padding", help="padding around logo in pixels", type=int, default=10)
     parser.add_argument("--logo-scale", help="logo size as fraction of image width", type=float, default=0.2)
     parser.add_argument("--opacity", help="logo opacity (0.0 to 1.0)", type=float, default=1.0)
+    parser.add_argument("--suffix", help="suffix to add to output filenames (before extension)", type=str, default="")
     parser.add_argument("--no-rec", help="turn off recursive image search", action="store_true")
     
     args = parser.parse_args()
@@ -220,6 +229,7 @@ if __name__ == "__main__":
         args.padding,
         args.logo_scale,
         args.opacity, 
-        not(args.no_rec)
+        not(args.no_rec),
+        args.suffix
     )
     
