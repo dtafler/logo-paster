@@ -45,3 +45,43 @@ jobs:
         name: LogoStamper-Windows
         path: release/
         retention-days: 30
+        
+    - name: Create ZIP for release
+      run: |
+        cd release
+        powershell Compress-Archive -Path * -DestinationPath ../LogoStamper-Windows.zip
+        cd ..
+        
+    - name: Get current date
+      id: date
+      run: echo "date=$(Get-Date -Format 'yyyy-MM-dd')" >> $env:GITHUB_OUTPUT
+      
+    - name: Create Release
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v${{ steps.date.outputs.date }}-${{ github.run_number }}
+        name: Logo Stamper v${{ steps.date.outputs.date }}-${{ github.run_number }}
+        body: |
+          ## Logo Stamper - Windows Executable
+          
+          **Release Date:** ${{ steps.date.outputs.date }}
+          **Build:** #${{ github.run_number }}
+          
+          ### Download
+          Download the ZIP file below and extract it to get the executable.
+          
+          ### Usage
+          1. Download and extract the ZIP file
+          2. Double-click `LogoStamper.exe` to run the application
+          3. Use the GUI to add logo watermarks to your images
+          
+          ### Changes
+          - Latest updates from commit: ${{ github.sha }}
+          
+        files: |
+          LogoStamper-Windows.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
