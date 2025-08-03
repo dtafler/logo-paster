@@ -5,6 +5,10 @@ on:
     branches: [ main, master ]  # Triggers on every push to main/master
   workflow_dispatch:  # Allows manual triggering
 
+permissions:
+  contents: write 
+  pull-requests: read
+
 jobs:
   build-windows:
     runs-on: windows-latest
