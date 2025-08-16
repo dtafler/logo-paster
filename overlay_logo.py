@@ -27,7 +27,7 @@ def stamp_folder(
     suffix: str = "",
     use_ai_naming: bool = False,
     openai_api_key: Optional[str] = None,
-    ai_model: str = "gpt-4o-mini",
+    ai_model: str = "gpt-5-mini",
     max_filename_length: int = 50
 ) -> None:
     

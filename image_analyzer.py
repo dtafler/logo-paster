@@ -6,16 +6,54 @@ import base64
 import io
 import re
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 from PIL import Image
-import openai
 from openai import OpenAI
+import time
+import random
 
+class SimpleLimiter:
+    """Fixed spacing between calls (e.g., 2 req/sec = 0.5s spacing)."""
+    def __init__(self, min_interval_s: float = 0.5):
+        self.min_interval_s = max(0.0, min_interval_s)
+        self._last = 0.0
+
+    def wait(self):
+        now = time.time()
+        wait_s = max(0.0, self._last + self.min_interval_s - now)
+        if wait_s:
+            time.sleep(wait_s)
+        self._last = time.time()
+
+def simple_retry(call, *, max_retries: int = 3):
+    """Retry on common transient failures with tiny exponential backoff."""
+    for attempt in range(max_retries):
+        try:
+            return call()
+        except Exception as e:
+            # Try to detect rate limit / transient errors
+            status = getattr(e, "status_code", None) or getattr(e, "http_status", None)
+            retry_after = None
+            headers = getattr(e, "headers", None) or getattr(e, "response_headers", None) or {}
+            if isinstance(headers, dict):
+                ra = headers.get("Retry-After") or headers.get("retry-after")
+                try:
+                    retry_after = float(ra) if ra is not None else None
+                except Exception:
+                    retry_after = None
+
+            transient = status in (429, 500, 502, 503, 504) or status is None
+            if attempt == max_retries - 1 or not transient:
+                raise
+
+            # sleep: prefer Retry-After, else tiny backoff with jitter
+            base = retry_after if retry_after is not None else (1.0 * (2 ** attempt))
+            time.sleep(base * (0.8 + 0.4 * random.random()))
 
 class ImageAnalyzer:
     """Analyzes images using OpenAI API to generate descriptive filenames."""
     
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+    def __init__(self, api_key: str, model: str = "gpt-5-mini", min_interval_s: float = 0.25):
         """
         Initialize the ImageAnalyzer.
         
@@ -25,6 +63,14 @@ class ImageAnalyzer:
         """
         self.client = OpenAI(api_key=api_key)
         self.model = model
+        self._limiter = SimpleLimiter(min_interval_s=min_interval_s)  
+
+    def _call_responses(self, **kwargs):
+        def _do():
+            self._limiter.wait()
+            return self.client.responses.create(**kwargs)
+        return simple_retry(_do)
+
         
     def analyze_image(self, image_path: str | Path, max_filename_length: int = 50) -> Optional[str]:
         """
@@ -73,31 +119,38 @@ class ImageAnalyzer:
                 "Do not include file extensions. "
                 "Examples: 'modern_kitchen_white_cabinets', 'sunset_mountain_landscape', 'red_sports_car_parked'"
             )
-            
-            # Make API call
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{img_base64}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=100,
-                temperature=0.3
+            prompt2 = (
+                f"Analyze the provided image and create a concise, descriptive filename (maximum {max_filename_length} characters)"
+                "The filename should: "
+                "- Focus on the main subject, setting, or key visual elements. "
+                "- Use only letters, numbers, hyphens, and underscores "
+                "- Exclude file extensions "
+                "- Be as informative as possible within the character limit. "
+                "Examples: 'modern_kitchen_white_cabinets', 'sunset_mountain_landscape', 'red_sports_car_parked'"
             )
             
+            # Make API call
+            response = self._call_responses(
+                model=self.model,
+                input=[{
+                    "role": "user", 
+                    "content": [
+                        {"type": "input_text", "text": prompt2},
+                        {"type": "input_image", "image_url": f"data:image/jpeg;base64,{img_base64}"}
+                    ]
+                }],
+                max_output_tokens=500,
+                reasoning={"effort": "low"},
+                text={"verbosity": "low"}
+            )
+            print(response)
+            
             # Extract and clean the filename
-            generated_name = response.choices[0].message.content.strip()
-            cleaned_name = self._clean_filename(generated_name, max_filename_length)
+            generated_name = (getattr(response, "output_text", "") or "").strip()
+            orig_filename = Path(image_path).name.split('.')[0]
+            cleaned_name = self._clean_filename(generated_name, max_filename_length, orig_filename)
+            print("generated name: ", generated_name)
+            print("cleaned name: ", cleaned_name)
             
             return cleaned_name
             
@@ -105,7 +158,7 @@ class ImageAnalyzer:
             print(f"[WARNING] Failed to analyze image {image_path}: {e}")
             return None
     
-    def _clean_filename(self, filename: str, max_length: int) -> str:
+    def _clean_filename(self, filename: str, max_length: int, orig_filename: str) -> str:
         """
         Clean and validate the generated filename.
         
@@ -137,7 +190,7 @@ class ImageAnalyzer:
         
         # Fallback if filename is empty or too short
         if len(filename) < 3:
-            filename = "analyzed_image"
+            filename = orig_filename
         
         return filename
 

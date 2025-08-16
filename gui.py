@@ -7,6 +7,7 @@ import io
 from PIL import Image, ImageTk
 from overlay_logo import stamp_folder, VerticalPosition, HorizontalPosition, _process_logo_on_image
 
+#TODO: rate limit openai problem
 
 class LogoStamperGUI:
     def __init__(self, root):
@@ -33,7 +34,7 @@ class LogoStamperGUI:
         # AI naming variables
         self.use_ai_naming = tk.BooleanVar(value=False)
         self.openai_api_key = tk.StringVar()
-        self.ai_model = tk.StringVar(value="gpt-4o-mini")
+        self.ai_model = tk.StringVar(value="gpt-5-mini")
         self.max_filename_length = tk.IntVar(value=50)
         
         # Preview variables
@@ -217,7 +218,7 @@ class LogoStamperGUI:
         self.model_label.grid(row=6, column=0, sticky=tk.W, padx=(20, 10), pady=(5, 0))
         
         self.model_combo = ttk.Combobox(options_frame, textvariable=self.ai_model,
-                                       values=["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"], 
+                                       values=["gpt-5", "gpt-5-mini", "gpt-5-nano"], 
                                        state="disabled", width=15)
         self.model_combo.grid(row=6, column=1, sticky=tk.W, pady=(5, 0), padx=(0, 20))
         
